@@ -8,17 +8,17 @@ import (
 )
 
 // ChainCallOption is a function that can be used to modify the behavior of the Call function.
-type ChainCallOption func(*chainCallOption)
+type ChainCallOption func(*ChainCallOptions)
 
 // For issue #626, each field here has a boolean "set" flag so we can
 // distinguish between the case where the option was actually set explicitly
-// on chainCallOption, or asked to remain default. The reason we need this is
+// on ChainCallOptions, or asked to remain default. The reason we need this is
 // that in translating options from ChainCallOption to llms.CallOption, the
 // notion of "default value the user didn't explicitly ask to change" is
 // violated.
 // These flags are hopefully a temporary backwards-compatible solution, until
 // we find a more fundamental solution for #626.
-type chainCallOption struct {
+type ChainCallOptions struct {
 	// Model is the model to use in an LLM call.
 	Model    string
 	modelSet bool
@@ -65,11 +65,19 @@ type chainCallOption struct {
 
 	// CallbackHandler is the callback handler for Chain
 	CallbackHandler callbacks.Handler
+
+	// Tools is a list of tools to use. Each tool can be a specific tool or a function.
+	Tools    []llms.Tool
+	toolsSet bool
+
+	// ToolChoice is the choice of tool to use, it can either be "none", "auto" (the default behavior), or a specific tool as described in the ToolChoice type.
+	ToolChoice    any
+	toolChoiceSet bool
 }
 
 // WithModel is an option for LLM.Call.
 func WithModel(model string) ChainCallOption {
-	return func(o *chainCallOption) {
+	return func(o *ChainCallOptions) {
 		o.Model = model
 		o.modelSet = true
 	}
@@ -77,7 +85,7 @@ func WithModel(model string) ChainCallOption {
 
 // WithMaxTokens is an option for LLM.Call.
 func WithMaxTokens(maxTokens int) ChainCallOption {
-	return func(o *chainCallOption) {
+	return func(o *ChainCallOptions) {
 		o.MaxTokens = maxTokens
 		o.maxTokensSet = true
 	}
@@ -85,7 +93,7 @@ func WithMaxTokens(maxTokens int) ChainCallOption {
 
 // WithTemperature is an option for LLM.Call.
 func WithTemperature(temperature float64) ChainCallOption {
-	return func(o *chainCallOption) {
+	return func(o *ChainCallOptions) {
 		o.Temperature = temperature
 		o.temperatureSet = true
 	}
@@ -93,14 +101,14 @@ func WithTemperature(temperature float64) ChainCallOption {
 
 // WithStreamingFunc is an option for LLM.Call that allows streaming responses.
 func WithStreamingFunc(streamingFunc func(ctx context.Context, chunk []byte) error) ChainCallOption {
-	return func(o *chainCallOption) {
+	return func(o *ChainCallOptions) {
 		o.StreamingFunc = streamingFunc
 	}
 }
 
 // WithTopK will add an option to use top-k sampling for LLM.Call.
 func WithTopK(topK int) ChainCallOption {
-	return func(o *chainCallOption) {
+	return func(o *ChainCallOptions) {
 		o.TopK = topK
 		o.topkSet = true
 	}
@@ -108,7 +116,7 @@ func WithTopK(topK int) ChainCallOption {
 
 // WithTopP	will add an option to use top-p sampling for LLM.Call.
 func WithTopP(topP float64) ChainCallOption {
-	return func(o *chainCallOption) {
+	return func(o *ChainCallOptions) {
 		o.TopP = topP
 		o.toppSet = true
 	}
@@ -116,7 +124,7 @@ func WithTopP(topP float64) ChainCallOption {
 
 // WithSeed will add an option to use deterministic sampling for LLM.Call.
 func WithSeed(seed int) ChainCallOption {
-	return func(o *chainCallOption) {
+	return func(o *ChainCallOptions) {
 		o.Seed = seed
 		o.seedSet = true
 	}
@@ -124,7 +132,7 @@ func WithSeed(seed int) ChainCallOption {
 
 // WithMinLength will add an option to set the minimum length of the generated text for LLM.Call.
 func WithMinLength(minLength int) ChainCallOption {
-	return func(o *chainCallOption) {
+	return func(o *ChainCallOptions) {
 		o.MinLength = minLength
 		o.minLengthSet = true
 	}
@@ -132,7 +140,7 @@ func WithMinLength(minLength int) ChainCallOption {
 
 // WithMaxLength will add an option to set the maximum length of the generated text for LLM.Call.
 func WithMaxLength(maxLength int) ChainCallOption {
-	return func(o *chainCallOption) {
+	return func(o *ChainCallOptions) {
 		o.MaxLength = maxLength
 		o.maxLengthSet = true
 	}
@@ -140,7 +148,7 @@ func WithMaxLength(maxLength int) ChainCallOption {
 
 // WithRepetitionPenalty will add an option to set the repetition penalty for sampling.
 func WithRepetitionPenalty(repetitionPenalty float64) ChainCallOption {
-	return func(o *chainCallOption) {
+	return func(o *ChainCallOptions) {
 		o.RepetitionPenalty = repetitionPenalty
 		o.repetitionPenaltySet = true
 	}
@@ -148,7 +156,7 @@ func WithRepetitionPenalty(repetitionPenalty float64) ChainCallOption {
 
 // WithStopWords is an option for setting the stop words for LLM.Call.
 func WithStopWords(stopWords []string) ChainCallOption {
-	return func(o *chainCallOption) {
+	return func(o *ChainCallOptions) {
 		o.StopWords = stopWords
 		o.stopWordsSet = true
 	}
@@ -156,13 +164,29 @@ func WithStopWords(stopWords []string) ChainCallOption {
 
 // WithCallback allows setting a custom Callback Handler.
 func WithCallback(callbackHandler callbacks.Handler) ChainCallOption {
-	return func(o *chainCallOption) {
+	return func(o *ChainCallOptions) {
 		o.CallbackHandler = callbackHandler
 	}
 }
 
-func getLLMCallOptions(options ...ChainCallOption) []llms.CallOption { //nolint:cyclop
-	opts := &chainCallOption{}
+// WithTools is an option for LLM.Call.
+func WithTools(tools []llms.Tool) ChainCallOption {
+	return func(o *ChainCallOptions) {
+		o.Tools = tools
+		o.toolsSet = true
+	}
+}
+
+// WithToolChoice is an option for LLM.Call.
+func WithToolChoice(choice any) ChainCallOption {
+	return func(o *ChainCallOptions) {
+		o.ToolChoice = choice
+		o.toolChoiceSet = true
+	}
+}
+
+func GetLLMCallOptions(options ...ChainCallOption) []llms.CallOption { //nolint:cyclop
+	opts := &ChainCallOptions{}
 	for _, option := range options {
 		option(opts)
 	}
@@ -204,6 +228,12 @@ func getLLMCallOptions(options ...ChainCallOption) []llms.CallOption { //nolint:
 	}
 	if opts.repetitionPenaltySet {
 		chainCallOption = append(chainCallOption, llms.WithRepetitionPenalty(opts.RepetitionPenalty))
+	}
+	if opts.toolsSet {
+		chainCallOption = append(chainCallOption, llms.WithTools(opts.Tools))
+	}
+	if opts.toolChoiceSet {
+		chainCallOption = append(chainCallOption, llms.WithToolChoice(opts.ToolChoice))
 	}
 	chainCallOption = append(chainCallOption, llms.WithStreamingFunc(opts.StreamingFunc))
 

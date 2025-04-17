@@ -30,7 +30,7 @@ var (
 
 // NewLLMChain creates a new LLMChain with an LLM and a prompt.
 func NewLLMChain(llm llms.Model, prompt prompts.FormatPrompter, opts ...ChainCallOption) *LLMChain {
-	opt := &chainCallOption{}
+	opt := &ChainCallOptions{}
 	for _, o := range opts {
 		o(opt)
 	}
@@ -56,7 +56,7 @@ func (c LLMChain) Call(ctx context.Context, values map[string]any, options ...Ch
 		return nil, err
 	}
 
-	result, err := llms.GenerateFromSinglePrompt(ctx, c.LLM, promptValue.String(), getLLMCallOptions(options...)...)
+	result, err := llms.GenerateFromSinglePrompt(ctx, c.LLM, promptValue.String(), GetLLMCallOptions(options...)...)
 	if err != nil {
 		return nil, err
 	}
