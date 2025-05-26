@@ -180,15 +180,20 @@ type ChatMessageModel struct {
 	Data ChatMessageModelData `bson:"data" json:"data"`
 }
 
-func (c ChatMessageModel) ToChatMessage() ChatMessage {
+func (c *ChatMessageModel) ToChatMessage() ChatMessage {
 	switch c.Type {
 	case string(ChatMessageTypeAI):
 		return AIChatMessage{Content: c.Data.Content}
+	case string(ChatMessageTypeGeneric):
+		return GenericChatMessage{Content: c.Data.Content}
 	case string(ChatMessageTypeHuman):
 		return HumanChatMessage{Content: c.Data.Content}
+	case string(ChatMessageTypeSystem):
+		return SystemChatMessage{Content: c.Data.Content}
 	default:
 		slog.Warn("convert to chat message failed with invalid message type", "type", c.Type)
-		return nil
+		// DO NOT return an error here, just return a generic message.
+		return GenericChatMessage{Content: c.Data.Content}
 	}
 }
 
