@@ -10,6 +10,7 @@ import (
 )
 
 func Test_ChainCallOptions(t *testing.T) {
+	t.Parallel()
 	// Test the default values of ChainCallOptions
 	options := &chains.ChainCallOptions{}
 	assert.Equal(t, "", options.Model)
