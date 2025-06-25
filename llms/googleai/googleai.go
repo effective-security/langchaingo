@@ -10,8 +10,8 @@ import (
 	"strings"
 
 	"github.com/google/generative-ai-go/genai"
+	"github.com/invopop/jsonschema"
 	"github.com/tmc/langchaingo/internal/imageutil"
-	"github.com/tmc/langchaingo/jsonschema"
 	"github.com/tmc/langchaingo/llms"
 	"google.golang.org/api/iterator"
 )
@@ -390,7 +390,7 @@ func convertTools(tools []llms.Tool) ([]*genai.Tool, error) {
 		var schema *genai.Schema
 		var err error
 
-		if jschema, ok := tool.Function.Parameters.(*jsonschema.Definition); ok {
+		if jschema, ok := tool.Function.Parameters.(*jsonschema.Schema); ok {
 			schema, err = convertJSONSchemaDefinition(jschema)
 		} else if params, ok := tool.Function.Parameters.(map[string]any); ok {
 			schema, err = convertMapToSchema(params)
@@ -412,7 +412,7 @@ func convertTools(tools []llms.Tool) ([]*genai.Tool, error) {
 }
 
 // convertJSONSchemaDefinition converts a jsonschema.Definition to a genai.Schema.
-func convertJSONSchemaDefinition(jschema *jsonschema.Definition) (*genai.Schema, error) {
+func convertJSONSchemaDefinition(jschema *jsonschema.Schema) (*genai.Schema, error) {
 	schema := &genai.Schema{
 		Type:        convertJSONSchemaType(jschema.Type),
 		Description: jschema.Description,
@@ -422,12 +422,12 @@ func convertJSONSchemaDefinition(jschema *jsonschema.Definition) (*genai.Schema,
 	// Convert properties
 	if jschema.Properties != nil {
 		schema.Properties = make(map[string]*genai.Schema)
-		for propName, propDef := range jschema.Properties {
-			propSchema, err := convertJSONSchemaDefinition(&propDef)
+		for pair := jschema.Properties.Oldest(); pair != nil; pair = pair.Next() {
+			propSchema, err := convertJSONSchemaDefinition(pair.Value)
 			if err != nil {
-				return nil, fmt.Errorf("property [%s]: %w", propName, err)
+				return nil, fmt.Errorf("property [%s]: %w", pair.Key, err)
 			}
-			schema.Properties[propName] = propSchema
+			schema.Properties[pair.Key] = propSchema
 		}
 	}
 
@@ -514,19 +514,19 @@ func convertMapToSchema(params map[string]any) (*genai.Schema, error) {
 }
 
 // convertJSONSchemaType converts a jsonschema.DataType to a genai.Type.
-func convertJSONSchemaType(dt jsonschema.DataType) genai.Type {
+func convertJSONSchemaType(dt string) genai.Type {
 	switch dt {
-	case jsonschema.Object:
+	case "object":
 		return genai.TypeObject
-	case jsonschema.String:
+	case "string":
 		return genai.TypeString
-	case jsonschema.Number:
+	case "number":
 		return genai.TypeNumber
-	case jsonschema.Integer:
+	case "integer":
 		return genai.TypeInteger
-	case jsonschema.Boolean:
+	case "boolean":
 		return genai.TypeBoolean
-	case jsonschema.Array:
+	case "array":
 		return genai.TypeArray
 	default:
 		return genai.TypeUnspecified

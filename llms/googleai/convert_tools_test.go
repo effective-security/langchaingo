@@ -1,17 +1,46 @@
 package googleai
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/google/generative-ai-go/genai"
+	"github.com/invopop/jsonschema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/tmc/langchaingo/jsonschema"
 	"github.com/tmc/langchaingo/llms"
+	orderedmap "github.com/wk8/go-ordered-map/v2"
 )
 
 func TestConvertTools(t *testing.T) {
 	t.Parallel()
+
+	tool1Def := `{
+		"description": "Weather request parameters",
+		"properties": {
+			"location": {
+				"type": "string",
+				"description": "City name"
+			},
+			"unit": {
+				"type": "string",
+				"enum": [
+					"celsius",
+					"fahrenheit"
+				],
+				"description": "Unit of measurement"
+			}
+		},
+		"type": "object",
+		"required": [
+			"location"
+		]
+	}`
+
+	// unmarshal
+	var sc1 jsonschema.Schema
+	err := json.Unmarshal([]byte(tool1Def), &sc1)
+	require.NoError(t, err)
 
 	tests := []struct {
 		name        string
@@ -27,21 +56,7 @@ func TestConvertTools(t *testing.T) {
 					Function: &llms.FunctionDefinition{
 						Name:        "getWeather",
 						Description: "Get weather information",
-						Parameters: &jsonschema.Definition{
-							Type:        jsonschema.Object,
-							Description: "Weather request parameters",
-							Properties: map[string]jsonschema.Definition{
-								"location": {
-									Type:        jsonschema.String,
-									Description: "City name",
-								},
-								"unit": {
-									Type: jsonschema.String,
-									Enum: []string{"celsius", "fahrenheit"},
-								},
-							},
-							Required: []string{"location"},
-						},
+						Parameters:  &sc1,
 					},
 				},
 			},
@@ -181,54 +196,6 @@ func TestConvertTools(t *testing.T) {
 			},
 		},
 		{
-			name: "convert jsonschema.Definition with array items",
-			tools: []llms.Tool{
-				{
-					Type: "function",
-					Function: &llms.FunctionDefinition{
-						Name:        "processItems",
-						Description: "Process a list of items",
-						Parameters: &jsonschema.Definition{
-							Type: jsonschema.Object,
-							Properties: map[string]jsonschema.Definition{
-								"items": {
-									Type: jsonschema.Array,
-									Items: &jsonschema.Definition{
-										Type:        jsonschema.String,
-										Description: "Item to process",
-									},
-								},
-							},
-							Required: []string{"items"},
-						},
-					},
-				},
-			},
-			expectError: false,
-			validate: func(t *testing.T, result []*genai.Tool) {
-				require.Len(t, result, 1)
-				tool := result[0]
-				require.Len(t, tool.FunctionDeclarations, 1)
-
-				funcDecl := tool.FunctionDeclarations[0]
-				assert.Equal(t, "processItems", funcDecl.Name)
-
-				schema := funcDecl.Parameters
-				assert.Equal(t, genai.TypeObject, schema.Type)
-				assert.Equal(t, []string{"items"}, schema.Required)
-
-				// Check items property
-				require.Len(t, schema.Properties, 1)
-				itemsProp := schema.Properties["items"]
-				assert.Equal(t, genai.TypeArray, itemsProp.Type)
-
-				// Check items schema
-				require.NotNil(t, itemsProp.Items)
-				assert.Equal(t, genai.TypeString, itemsProp.Items.Type)
-				assert.Equal(t, "Item to process", itemsProp.Items.Description)
-			},
-		},
-		{
 			name: "multiple tools",
 			tools: []llms.Tool{
 				{
@@ -236,13 +203,18 @@ func TestConvertTools(t *testing.T) {
 					Function: &llms.FunctionDefinition{
 						Name:        "tool1",
 						Description: "First tool",
-						Parameters: &jsonschema.Definition{
-							Type: jsonschema.Object,
-							Properties: map[string]jsonschema.Definition{
-								"param1": {
-									Type: jsonschema.String,
-								},
-							},
+						Parameters: &jsonschema.Schema{
+							Type: "object",
+							Properties: orderedmap.New[string, *jsonschema.Schema](
+								orderedmap.WithInitialData(
+									orderedmap.Pair[string, *jsonschema.Schema]{
+										Key: "param1",
+										Value: &jsonschema.Schema{
+											Type: "string",
+										},
+									},
+								),
+							),
 						},
 					},
 				},
@@ -365,24 +337,32 @@ func TestConvertJSONSchemaDefinition(t *testing.T) {
 
 	tests := []struct {
 		name        string
-		definition  *jsonschema.Definition
+		definition  *jsonschema.Schema
 		expectError bool
 		validate    func(t *testing.T, result *genai.Schema)
 	}{
 		{
 			name: "simple object with properties",
-			definition: &jsonschema.Definition{
-				Type:        jsonschema.Object,
+			definition: &jsonschema.Schema{
+				Type:        "object",
 				Description: "Test schema",
-				Properties: map[string]jsonschema.Definition{
-					"name": {
-						Type:        jsonschema.String,
-						Description: "Name field",
-					},
-					"age": {
-						Type: jsonschema.Integer,
-					},
-				},
+				Properties: orderedmap.New[string, *jsonschema.Schema](
+					orderedmap.WithInitialData(
+						orderedmap.Pair[string, *jsonschema.Schema]{
+							Key: "name",
+							Value: &jsonschema.Schema{
+								Type:        "string",
+								Description: "Name field",
+							},
+						},
+						orderedmap.Pair[string, *jsonschema.Schema]{
+							Key: "age",
+							Value: &jsonschema.Schema{
+								Type: "integer",
+							},
+						},
+					),
+				),
 				Required: []string{"name"},
 			},
 			expectError: false,
@@ -399,10 +379,10 @@ func TestConvertJSONSchemaDefinition(t *testing.T) {
 		},
 		{
 			name: "array with items",
-			definition: &jsonschema.Definition{
-				Type: jsonschema.Array,
-				Items: &jsonschema.Definition{
-					Type:        jsonschema.Number,
+			definition: &jsonschema.Schema{
+				Type: "array",
+				Items: &jsonschema.Schema{
+					Type:        "number",
 					Description: "Array item",
 				},
 			},
@@ -416,21 +396,34 @@ func TestConvertJSONSchemaDefinition(t *testing.T) {
 		},
 		{
 			name: "nested object properties",
-			definition: &jsonschema.Definition{
-				Type: jsonschema.Object,
-				Properties: map[string]jsonschema.Definition{
-					"address": {
-						Type: jsonschema.Object,
-						Properties: map[string]jsonschema.Definition{
-							"street": {
-								Type: jsonschema.String,
-							},
-							"city": {
-								Type: jsonschema.String,
+			definition: &jsonschema.Schema{
+				Type: "object",
+				Properties: orderedmap.New[string, *jsonschema.Schema](
+					orderedmap.WithInitialData(
+						orderedmap.Pair[string, *jsonschema.Schema]{
+							Key: "address",
+							Value: &jsonschema.Schema{
+								Type: "object",
+								Properties: orderedmap.New[string, *jsonschema.Schema](
+									orderedmap.WithInitialData(
+										orderedmap.Pair[string, *jsonschema.Schema]{
+											Key: "street",
+											Value: &jsonschema.Schema{
+												Type: "string",
+											},
+										},
+										orderedmap.Pair[string, *jsonschema.Schema]{
+											Key: "city",
+											Value: &jsonschema.Schema{
+												Type: "string",
+											},
+										},
+									),
+								),
 							},
 						},
-					},
-				},
+					),
+				),
 			},
 			expectError: false,
 			validate: func(t *testing.T, result *genai.Schema) {
@@ -573,16 +566,16 @@ func TestConvertJSONSchemaType(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		input    jsonschema.DataType
+		input    string
 		expected genai.Type
 	}{
-		{jsonschema.Object, genai.TypeObject},
-		{jsonschema.String, genai.TypeString},
-		{jsonschema.Number, genai.TypeNumber},
-		{jsonschema.Integer, genai.TypeInteger},
-		{jsonschema.Boolean, genai.TypeBoolean},
-		{jsonschema.Array, genai.TypeArray},
-		{jsonschema.Null, genai.TypeUnspecified},
+		{"object", genai.TypeObject},
+		{"string", genai.TypeString},
+		{"number", genai.TypeNumber},
+		{"integer", genai.TypeInteger},
+		{"boolean", genai.TypeBoolean},
+		{"array", genai.TypeArray},
+		{"null", genai.TypeUnspecified},
 		{"unknown", genai.TypeUnspecified},
 	}
 
