@@ -387,22 +387,24 @@ func convertTools(tools []llms.Tool) ([]*genai.Tool, error) {
 			Description: tool.Function.Description,
 		}
 
-		var schema *genai.Schema
-		var err error
+		if tool.Function.Parameters != nil {
+			var schema *genai.Schema
+			var err error
 
-		if jschema, ok := tool.Function.Parameters.(*jsonschema.Schema); ok {
-			schema, err = convertJSONSchemaDefinition(jschema)
-		} else if params, ok := tool.Function.Parameters.(map[string]any); ok {
-			schema, err = convertMapToSchema(params)
-		} else {
-			return nil, fmt.Errorf("tool [%d]: unsupported type %T of Parameters", i, tool.Function.Parameters)
+			if jschema, ok := tool.Function.Parameters.(*jsonschema.Schema); ok {
+				schema, err = convertJSONSchemaDefinition(jschema)
+			} else if params, ok := tool.Function.Parameters.(map[string]any); ok {
+				schema, err = convertMapToSchema(params)
+			} else {
+				return nil, fmt.Errorf("tool [%d]: unsupported type %T of Parameters", i, tool.Function.Parameters)
+			}
+
+			if err != nil {
+				return nil, fmt.Errorf("tool [%d]: %w", i, err)
+			}
+			genaiFuncDecl.Parameters = schema
 		}
 
-		if err != nil {
-			return nil, fmt.Errorf("tool [%d]: %w", i, err)
-		}
-
-		genaiFuncDecl.Parameters = schema
 		genaiTools = append(genaiTools, &genai.Tool{
 			FunctionDeclarations: []*genai.FunctionDeclaration{genaiFuncDecl},
 		})
