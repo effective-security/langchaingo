@@ -95,7 +95,7 @@ func (g *GoogleAI) GenerateContent(
 		return nil, fmt.Errorf("conflicting options, can't use JSONMode and ResponseMIMEType together")
 	case opts.ResponseMIMEType != "" && !opts.JSONMode:
 		model.ResponseMIMEType = opts.ResponseMIMEType
-	case opts.ResponseMIMEType == "" && opts.JSONMode:
+	case opts.ResponseMIMEType == "" && opts.JSONMode && len(model.Tools) == 0:
 		model.ResponseMIMEType = ResponseMIMETypeJson
 	}
 
