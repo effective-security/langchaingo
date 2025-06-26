@@ -225,6 +225,9 @@ func processMessages(messages []llms.MessageContent) ([]anthropicclient.ChatMess
 	chatMessages := make([]anthropicclient.ChatMessage, 0, len(messages))
 	systemPrompt := ""
 	for _, msg := range messages {
+		if len(msg.Parts) == 0 {
+			continue
+		}
 		switch msg.Role {
 		case llms.ChatMessageTypeSystem:
 			content, err := handleSystemMessage(msg)
